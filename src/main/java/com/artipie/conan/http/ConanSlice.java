@@ -24,39 +24,51 @@
 package com.artipie.conan.http;
 
 import com.artipie.asto.Storage;
+import com.artipie.http.Headers;
 import com.artipie.http.Slice;
 import com.artipie.http.auth.Action;
 import com.artipie.http.auth.Authentication;
 import com.artipie.http.auth.BasicAuthSlice;
 import com.artipie.http.auth.Permission;
 import com.artipie.http.auth.Permissions;
+import com.artipie.http.headers.ContentType;
+import com.artipie.http.headers.Header;
 import com.artipie.http.rq.RqMethod;
+import com.artipie.http.rs.RsStatus;
+import com.artipie.http.rs.RsWithBody;
+import com.artipie.http.rs.RsWithHeaders;
+import com.artipie.http.rs.RsWithStatus;
 import com.artipie.http.rt.ByMethodsRule;
+import com.artipie.http.rt.RtRule;
 import com.artipie.http.rt.RtRulePath;
 import com.artipie.http.rt.SliceRoute;
 import com.artipie.http.slice.SliceDownload;
+import com.artipie.http.slice.SliceSimple;
+import com.google.common.collect.Lists;
+import java.nio.charset.StandardCharsets;
+import javax.json.Json;
 
 /**
  * Artipie {@link Slice} for Conan repository HTTP API.
  * @since 0.1
  * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
  */
-public class ConanSlice extends Slice.Wrap  {
+public final class ConanSlice extends Slice.Wrap {
 
     /**
      * Ctor.
      * @param storage Storage object.
      */
-    ConanSlice(final Storage storage) {
+    public ConanSlice(final Storage storage) {
         this(storage, Permissions.FREE, Authentication.ANONYMOUS);
     }
 
     /**
      * Ctor.
+     *
      * @param storage Storage object.
      * @param perms Permissions.
      * @param auth Authentication parameters.
-     * @checkstyle ParameterNumberCheck (7 lines)
      */
     public ConanSlice(
         final Storage storage,
@@ -65,6 +77,70 @@ public class ConanSlice extends Slice.Wrap  {
     ) {
         super(
             new SliceRoute(
+                new RtRulePath(
+                    new RtRule.ByPath("^/v1/ping$"),
+                    new SliceSimple(
+                        new RsWithHeaders(
+                            new RsWithStatus(RsStatus.ACCEPTED),
+                            new Headers.From("X-Conan-Server-Capabilities", "")
+                        )
+                    )
+                ),
+                new RtRulePath(
+                    new RtRule.ByPath("/v1/conans/search"),
+                    new BasicAuthSlice(
+                        new SliceSimple(
+                            new RsWithBody(
+                                new RsWithHeaders(
+                                    new RsWithStatus(RsStatus.OK),
+                                    new ContentType(String.format("application/json")),
+                                    new Header("Server", "Artipie/0.1")
+                                ),
+                                Json.createObjectBuilder().add(
+                                    "results", Json.createArrayBuilder(
+                                        Lists.newArrayList(
+                                            "test1/1.0", "test2/0.1"
+                                            ))
+                                ).build().toString().getBytes(StandardCharsets.UTF_8)
+                            )
+                        ),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.WRITE)
+                    )
+                ),
+                new RtRulePath(
+                    new RtRule.All(
+                        new RtRule.ByPath(ConansEntity.DLOAD_SRC_PATH.getPath()),
+                        ByMethodsRule.Standard.GET
+                    ),
+                    new BasicAuthSlice(
+                        new ConansEntity.GetDownload(storage),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.READ)
+                    )
+                ),
+                new RtRulePath(
+                    new RtRule.All(
+                        new RtRule.ByPath(ConansEntity.SEARCH_PKG_PATH.getPath()),
+                        ByMethodsRule.Standard.GET
+                    ),
+                    new BasicAuthSlice(
+                        new ConansEntity.GetSearchPkg(storage),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.READ)
+                    )
+                ),
+                new RtRulePath(
+                    new RtRule.All(
+                        new RtRule.ByPath(ConansEntity.PKG_BIN_INFO_PATH.getPath()),
+                        ByMethodsRule.Standard.GET
+                    ),
+                    new BasicAuthSlice(
+                        new ConansEntity.GetPkgInfo(storage),
+                        auth,
+                        new Permission.ByName(perms, Action.Standard.READ)
+                    )
+                ),
                 new RtRulePath(
                     new ByMethodsRule(RqMethod.GET),
                     new BasicAuthSlice(
