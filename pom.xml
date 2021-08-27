@@ -109,5 +109,24 @@ SOFTWARE.
         </plugin>
       </plugins>
     </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.gaul</groupId>
+        <artifactId>modernizer-maven-plugin</artifactId>
+        <version>2.3.0</version>
+        <executions>
+          <execution>
+            <id>modernizer</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>modernizer</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <javaVersion>${maven.compiler.source}</javaVersion>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>
