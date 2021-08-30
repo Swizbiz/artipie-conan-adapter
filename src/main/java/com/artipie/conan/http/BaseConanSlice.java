@@ -23,7 +23,9 @@
  */
 package com.artipie.conan.http;
 
+import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
+import com.artipie.conan.Completables;
 import com.artipie.http.Response;
 import com.artipie.http.Slice;
 import com.artipie.http.async.AsyncResponse;
@@ -32,17 +34,26 @@ import com.artipie.http.rq.RqHeaders;
 import com.artipie.http.rs.RsWithBody;
 import com.artipie.http.rs.RsWithHeaders;
 import com.artipie.http.rs.StandardRs;
+import io.vavr.Tuple2;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.regex.Matcher;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import javax.json.Json;
+import javax.json.JsonObjectBuilder;
 import org.reactivestreams.Publisher;
 
 /**
  * Base slice class for Conan REST APIs.
  * @since 0.1
+ * @checkstyle ClassDataAbstractionCouplingCheck (500 lines)
  */
 abstract class BaseConanSlice implements Slice {
 
@@ -133,6 +144,40 @@ abstract class BaseConanSlice implements Slice {
     protected abstract CompletableFuture<RequestResult> getResult(
         RequestLineFrom request, String hostname, Matcher matcher
     );
+
+    /**
+     * Generate RequestResult based on array of keys (files) and several handlers.
+     * @param keys Array of keys to process.
+     * @param mapper Mapper of key to the tuple with key & completable future.
+     * @param generator Filters and generates value for json.
+     * @param ctor Constructs resulting json string.
+     * @param <T> Generators result type.
+     * @return Json RequestResult in CompletableFuture.
+     * @checkstyle ParameterNumberCheck (40 lines)
+     */
+    protected static <T> CompletableFuture<RequestResult> generateJson(
+        final String[] keys,
+        final Function<String, Tuple2<Key, CompletableFuture<T>>> mapper,
+        final Function<Tuple2<String, T>, Optional<String>> generator,
+        final Function<JsonObjectBuilder, String> ctor
+    ) {
+        final List<Tuple2<Key, CompletableFuture<T>>> keychecks = Stream.of(keys).map(mapper)
+            .collect(Collectors.toList());
+        return new Completables.JoinTuples<>(keychecks).toTuples().thenApply(
+            tuples -> {
+                final JsonObjectBuilder builder = Json.createObjectBuilder();
+                for (final Tuple2<Key, T> tuple : tuples) {
+                    final Optional<String> result = generator.apply(
+                        new Tuple2<>(tuple._1().string(), tuple._2())
+                    );
+                    if (result.isPresent()) {
+                        final String[] parts = tuple._1().string().split("/");
+                        builder.add(parts[parts.length - 1], result.get());
+                    }
+                }
+                return builder;
+            }).thenApply(ctor).thenApply(RequestResult::new);
+    }
 
     /**
      * HTTP Request result bytes + Content-type string.
