@@ -25,7 +25,7 @@ package com.artipie.conan;
 
 import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
-import com.artipie.asto.ext.PublisherAs;
+import com.artipie.asto.blocking.BlockingStorage;
 import com.artipie.asto.memory.InMemoryStorage;
 import com.artipie.asto.test.TestResource;
 import java.io.StringReader;
@@ -43,32 +43,32 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Tests for RevisionsIndex class.
+ * Tests for RevisionsIndexApi class.
  * @since 0.1
  */
 @SuppressWarnings({"PMD.AvoidDuplicateLiterals", "PMD.UseVarargs"})
-class RevisionsIndexTest {
+class RevisionsIndexApiTest {
 
     /**
      * ZLIB binary package dir. name (hash).
      */
-    static final String ZLIB_BIN_PKG = "6af9cc7cb931c5ad942174fd7838eb655717c709";
+    private static final String ZLIB_BIN_PKG = "6af9cc7cb931c5ad942174fd7838eb655717c709";
 
     /**
      * Path to zlib package binary index file.
      */
-    static final String ZLIB_BIN_INDEX =
+    private static final String ZLIB_BIN_INDEX =
         "zlib/1.2.11/_/_/0/package/6af9cc7cb931c5ad942174fd7838eb655717c709/revisions.txt";
 
     /**
      * Path to zlib package recipe index file.
      */
-    static final String ZLIB_SRC_INDEX = "zlib/1.2.11/_/_/revisions.txt";
+    private static final String ZLIB_SRC_INDEX = "zlib/1.2.11/_/_/revisions.txt";
 
     /**
      * Path prefix for conan repository test data.
      */
-    static final String DIR_PREFIX = "conan-test/data/";
+    private static final String DIR_PREFIX = "conan-test/data/";
 
     /**
      * Test storage.
@@ -78,31 +78,30 @@ class RevisionsIndexTest {
     /**
      * Test instance.
      */
-    private RevisionsIndex index;
+    private RevisionsIndexApi index;
 
     @BeforeEach
     void setUp() {
         this.storage = new InMemoryStorage();
-        this.index = new RevisionsIndex(this.storage, "zlib/1.2.11/_/_");
+        this.index = new RevisionsIndexApi(this.storage, new Key.From("zlib/1.2.11/_/_"));
     }
 
     @ParameterizedTest
     @MethodSource("indexingTestFilesList")
     void updateRecipeIndex(final String[] files) {
         for (final String file : files) {
-            new TestResource(RevisionsIndexTest.DIR_PREFIX + file)
+            new TestResource(String.join("", RevisionsIndexApiTest.DIR_PREFIX, file))
                 .saveTo(this.storage, new Key.From(file));
         }
         final List<Integer> result = this.index.updateRecipeIndex().toCompletableFuture().join();
-        final JsonParser parser = this.storage.value(
-            new Key.From(RevisionsIndexTest.ZLIB_SRC_INDEX)
-        ).thenCompose(content -> new PublisherAs(content).asciiString()).thenApply(
-            str -> Json.createParser(new StringReader(str))
-        ).join();
+        final Key key = new Key.From(RevisionsIndexApiTest.ZLIB_SRC_INDEX);
+        final JsonParser parser = Json.createParser(
+            new StringReader(new String(new BlockingStorage(this.storage).value(key)))
+        );
         parser.next();
         final JsonArray revs = parser.getObject().getJsonArray("revisions");
-        final String time = RevisionsIndexTest.getJsonStr(revs.get(0), "time");
-        final String revision = RevisionsIndexTest.getJsonStr(revs.get(0), "revision");
+        final String time = RevisionsIndexApiTest.getJsonStr(revs.get(0), "time");
+        final String revision = RevisionsIndexApiTest.getJsonStr(revs.get(0), "revision");
         MatcherAssert.assertThat(
             "The revision object fields have incorrect format",
             time.length() > 0 && revision.length() > 0 && result.size() == revs.size()
@@ -121,21 +120,20 @@ class RevisionsIndexTest {
     @MethodSource("indexingTestFilesList")
     void updateBinaryIndex(final String[] files) {
         for (final String file : files) {
-            new TestResource(RevisionsIndexTest.DIR_PREFIX + file)
+            new TestResource(String.join("", RevisionsIndexApiTest.DIR_PREFIX, file))
                 .saveTo(this.storage, new Key.From(file));
         }
         final List<Integer> result = this.index.updateBinaryIndex(
-            0, RevisionsIndexTest.ZLIB_BIN_PKG
+            0, RevisionsIndexApiTest.ZLIB_BIN_PKG
         ).toCompletableFuture().join();
-        final JsonParser parser = this.storage.value(
-            new Key.From(RevisionsIndexTest.ZLIB_BIN_INDEX)
-        ).thenCompose(content -> new PublisherAs(content).asciiString()).thenApply(
-            str -> Json.createParser(new StringReader(str))
-        ).join();
+        final Key key = new Key.From(RevisionsIndexApiTest.ZLIB_BIN_INDEX);
+        final JsonParser parser = Json.createParser(
+            new StringReader(new String(new BlockingStorage(this.storage).value(key)))
+        );
         parser.next();
         final JsonArray revs = parser.getObject().getJsonArray("revisions");
-        final String time = RevisionsIndexTest.getJsonStr(revs.get(0), "time");
-        final String revision = RevisionsIndexTest.getJsonStr(revs.get(0), "revision");
+        final String time = RevisionsIndexApiTest.getJsonStr(revs.get(0), "time");
+        final String revision = RevisionsIndexApiTest.getJsonStr(revs.get(0), "revision");
         MatcherAssert.assertThat(
             "The revision object fields have incorrect format",
             time.length() > 0 && revision.length() > 0 && result.size() == revs.size()
@@ -155,7 +153,7 @@ class RevisionsIndexTest {
     }
 
     /**
-     * Returns test package files list for indexing tests - without index files (revisions.txt).
+     * Returns test package files list for indexing tests (without revisions.txt files).
      * @return List of files, as Stream of junit Arguments.
      * @checkstyle LineLengthCheck (20 lines)
      */
