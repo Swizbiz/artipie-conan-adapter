@@ -25,6 +25,8 @@ package com.artipie.conan.http;
 
 import com.artipie.asto.Key;
 import com.artipie.asto.Storage;
+import com.artipie.asto.ext.ContentDigest;
+import com.artipie.asto.ext.Digests;
 import com.artipie.conan.Completables;
 import com.artipie.http.Response;
 import com.artipie.http.Slice;
@@ -135,10 +137,30 @@ abstract class BaseConanSlice implements Slice {
     }
 
     /**
+     * Generates An md5 hash for package file.
+     * @param key Storage key for package file.
+     * @return An md5 hash string for file content.
+     */
+    protected CompletableFuture<String> generateMDhash(final Key key) {
+        return this.storage.exists(key).thenCompose(
+            exist -> {
+                final CompletableFuture<String> result;
+                if (exist) {
+                    result = this.storage.value(key).thenCompose(
+                        content -> new ContentDigest(content, Digests.MD5).hex()
+                    );
+                } else {
+                    result = CompletableFuture.completedFuture("");
+                }
+                return result;
+            });
+    }
+
+    /**
      * Processess the request and returns result data for this request.
      * @param request Artipie request line helper object instance.
      * @param hostname Current server host name string to construct and process URLs.
-     * @param matcher Matched paattern matcher object for the current path wrapper.
+     * @param matcher Matched pattern matcher object for the current path wrapper.
      * @return Future object, providing request result data.
      */
     protected abstract CompletableFuture<RequestResult> getResult(
