@@ -36,6 +36,7 @@ import com.artipie.http.rq.RqHeaders;
 import com.artipie.http.rs.RsWithBody;
 import com.artipie.http.rs.RsWithHeaders;
 import com.artipie.http.rs.StandardRs;
+import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -45,7 +46,6 @@ import javax.json.Json;
 import javax.json.JsonObjectBuilder;
 import javax.json.stream.JsonParser;
 import org.reactivestreams.Publisher;
-import software.amazon.awssdk.utils.StringInputStream;
 
 /**
  * Slice for Conan package data uploading support.
@@ -194,7 +194,7 @@ public final class ConanUpload {
             final String filename, final String hostname) {
             return new PublisherAs(body).asciiString().thenApply(
                 str -> {
-                    final JsonParser parser = Json.createParser(new StringInputStream(str));
+                    final JsonParser parser = Json.createParser(new StringReader(str));
                     parser.next();
                     final JsonObjectBuilder result = Json.createObjectBuilder();
                     for (final String key : parser.getObject().keySet()) {
